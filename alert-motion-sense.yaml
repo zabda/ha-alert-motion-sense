@@ -1,0 +1,133 @@
+blueprint:
+  name: Camera Triggered - Detect -> Snapshot | Security Light -> Send Snapshot 
+  description: >
+    This automation blueprint creates a camera snapshot if motion is detected for a period 
+    and sends a notification to your phone with the picture.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Motion sensor
+      description: The sensor wich triggers the snapshot creation
+      selector:
+          entity:
+            domain: binary_sensor
+            device_class: motion
+    camera:
+      name: Camera
+      description: The camera which creates the snapshot
+      selector:
+        entity:
+          domain: camera
+          
+    notify_device_1:
+      name: Device to notify (1)
+      description: First device to notify
+      selector:
+        device:
+          integration: mobile_app
+    
+    notify_device_2:
+      name: Device to notify (2)
+      description: Second device to notify
+      selector:
+        device:
+          integration: mobile_app
+
+    notification_title:
+      name: Notification title (Optional)
+      description: 'Default: "Motion Detected"'
+      default: "Motion Detected"
+
+    notification_message:
+      name: Notification message (Optional)
+      description: 'Default: "{{ motion_sensor_name }} detected motion"'
+      default: "{{ motion_sensor_name }} detected motion"
+      
+    delay:
+      name: Delay (Optional)
+      description: Wait before creating camera snapshot
+      default: ""
+      selector:
+        number:
+            min: 0
+            max: 60
+            unit_of_measurement: seconds
+            mode: slider
+            
+    event_duration:
+      name: Event Duration (Optional)
+      description: Ensure event persists for a duration before alerting.
+      selector:
+        duration:
+
+trigger:
+  platform: state
+  entity_id: !input motion_sensor
+  from: "off"
+  to: "on"
+  
+variables:
+  motion_sensor: !input motion_sensor
+  motion_sensor_name: "{{ states[motion_sensor].name }}"
+  camera: !input camera
+  notify_device: !input notify_device
+  notification_title: !input notification_title
+  notification_message: !input notification_message
+  delay: !input delay
+  snapshot_create_file_path: "/config/www/tmp/snapshot_{{ states[camera].object_id }}.jpg"
+  snapshot_access_file_path: "{{ snapshot_create_file_path | replace('/config/www','/local') }}"
+
+condition:
+  - condition: state
+    entity_id: alarm_control_panel.home_alarm
+    state: armed_home
+
+action:
+  - delay: !input event_duration
+  
+  - service: camera.snapshot
+    entity_id: !input camera
+    data:
+      filename: "{{ snapshot_create_file_path }}"
+
+  - device_id: !input notify_device_1
+    domain: mobile_app
+    type: notify
+    message: Zone {{ trigger }} has been violated
+    title: Alarm! {{ trigger }}
+    data:
+      image: "{{ snapshot_access_file_path }}"
+      sticky: 'true'
+      ttl: 0
+      priority: high
+      channel: alarm_stream
+      actions:
+        - action: ACTION_SILENCE
+          title: Silence Alarm
+          icon: 'sfsymbols:bell'
+        - action: ACTION_REARM
+          title: Re-Arm Alarm
+          icon: 'sfsymbols:bell'
+      url:
+        _: "/2-cromer/security"
+
+  - device_id: !input notify_device_2
+    domain: mobile_app
+    type: notify
+    message: Zone {{ trigger }} has been violated
+    title: Alarm! {{ trigger }}
+    data:
+      image: "{{ snapshot_access_file_path }}"
+      sticky: 'true'
+      ttl: 0
+      priority: high
+      channel: alarm_stream
+      actions:
+        - action: ACTION_SILENCE
+          title: Silence Alarm
+          icon: 'sfsymbols:bell'
+        - action: ACTION_REARM
+          title: Re-Arm Alarm
+          icon: 'sfsymbols:bell'
+      url:
+        _: "/2-cromer/security"
